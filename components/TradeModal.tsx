@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Player, Property, Space, TradeOffer } from '../types.ts';
+import { Player, Property, Space, TradeOffer } from '@/types.ts';
 
 interface TradeModalProps {
     currentPlayer: Player;

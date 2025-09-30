@@ -1,4 +1,4 @@
-import { GameState, GameAction } from '../types.ts';
+import { GameState, GameAction } from '@/types.ts';
 import { supabase } from '@/supabaseClient.ts';
 import { RealtimeChannel } from '@supabase/supabase-js';
 

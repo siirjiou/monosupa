@@ -1,5 +1,5 @@
 import React from 'react';
-import { Player, Property, Space, SpaceType } from '../types.ts';
+import { Player, Property, Space, SpaceType } from '@/types.ts';
 import { Modal } from '../components/Modal.tsx';
 import { PropertyCard } from '@/components/PropertyCard.tsx';
 

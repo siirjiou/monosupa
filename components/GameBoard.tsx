@@ -1,5 +1,5 @@
 import React from 'react';
-import { Space, Property, SpaceType, Player } from '../types.ts';
+import { Space, Property, SpaceType, Player } from '@/types.ts';
 
 interface PlayerTokenProps {
     player: Player;

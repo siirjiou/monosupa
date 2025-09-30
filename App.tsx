@@ -17,7 +17,7 @@ import {
   PendingActionType,
   GameAction,
   PendingAction,
-} from './types.ts';
+} from '@/types.ts';
 import * as multiplayerService from '@/services/multiplayerService.ts';
 
 // --- Trade Display Components (defined locally in App.tsx) ---

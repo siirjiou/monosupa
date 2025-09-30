@@ -1,5 +1,5 @@
 import React from 'react';
-import { Property, SpaceType } from '../types.ts';
+import { Property, SpaceType } from '@/types.ts';
 
 interface PropertyCardProps {
   property: Property;
