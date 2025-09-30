@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { GameBoard } from './components/GameBoard';
-import { PlayerInfo } from './components/PlayerInfo';
-import { Modal } from './components/Modal';
-import { Dice } from './components/Dice';
-import { PropertyCard } from './components/PropertyCard';
-import { TradeModal } from './components/TradeModal';
-import { ManagePropertiesModal } from './components/ManagePropertiesModal';
-import { Lobby } from './components/Lobby';
+import { GameBoard } from '@/components/GameBoard.tsx';
+import { PlayerInfo } from '@/components/PlayerInfo.tsx';
+import { Modal } from './components/Modal.tsx';
+import { Dice } from './components/Dice.tsx';
+import { PropertyCard } from '@/components/PropertyCard.tsx';
+import { TradeModal } from '@/components/TradeModal.tsx';
+import { ManagePropertiesModal } from '@/components/ManagePropertiesModal.tsx';
+import { Lobby } from '@/components/Lobby.tsx';
 import {
   GameState,
   GamePhase,
@@ -17,8 +17,8 @@ import {
   PendingActionType,
   GameAction,
   PendingAction,
-} from './types';
-import * as multiplayerService from './services/multiplayerService';
+} from './types.ts';
+import * as multiplayerService from '@/services/multiplayerService.ts';
 
 // --- Trade Display Components (defined locally in App.tsx) ---
 

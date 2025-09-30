@@ -1,7 +1,7 @@
 import React from 'react';
-import { Player, Property, Space, SpaceType } from '@/types';
-import { Modal } from '@/components/Modal';
-import { PropertyCard } from '@/components/PropertyCard';
+import { Player, Property, Space, SpaceType } from '../../types.ts';
+import { Modal } from '../../components/Modal.tsx';
+import { PropertyCard } from '@/components/PropertyCard.tsx';
 
 interface ManagePropertiesModalProps {
     player: Player;
