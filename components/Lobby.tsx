@@ -1,5 +1,5 @@
 import React from 'react';
-import { GameState, Player } from '../types';
+import { GameState, Player } from '../types.ts';
 
 interface LobbyProps {
     gameState: GameState;

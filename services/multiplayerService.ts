@@ -1,10 +1,9 @@
-import { GameState, GameAction } from '../types';
-import { database } from '../firebaseConfig';
-import { ref, onValue, off } from 'firebase/database';
-
+import { GameState, GameAction } from '../types.ts';
+import { supabase } from '@/supabaseClient.ts';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 export async function createGame(hostName: string): Promise<{ gameId: string, playerId: number }> {
-    const response = await fetch('/api/createGame', {
+    const response = await fetch('/.netlify/functions/createGame', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: hostName })
@@ -17,7 +16,7 @@ export async function createGame(hostName: string): Promise<{ gameId: string, pl
 }
 
 export async function joinGame(gameId: string, playerName: string): Promise<{ gameId: string, playerId: number }> {
-    const response = await fetch('/api/joinGame', {
+    const response = await fetch('/.netlify/functions/joinGame', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gameId, name: playerName })
@@ -30,23 +29,53 @@ export async function joinGame(gameId: string, playerName: string): Promise<{ ga
 }
 
 export function subscribeToGame(gameId: string, callback: (gameState: GameState | null) => void): () => void {
-    const gameRef = ref(database, `games/${gameId}`);
+    const channel: RealtimeChannel = supabase
+        .channel(`game-${gameId}`)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'games',
+                filter: `id=eq.${gameId}`,
+            },
+            (payload) => {
+                const newState = payload.new as { game_state: GameState };
+                callback(newState.game_state);
+            }
+        )
+        .subscribe((status, err) => {
+            if (status === 'SUBSCRIBED') {
+                console.log(`Subscribed to game ${gameId}`);
+                // Fetch the complete initial state once the subscription is live.
+                const fetchInitialState = async () => {
+                    const { data, error } = await supabase
+                        .from('games')
+                        .select('game_state')
+                        .eq('id', gameId)
+                        .single();
 
-    const unsubscribe = onValue(gameRef, (snapshot) => {
-        const state = snapshot.val() as GameState | null;
-        callback(state);
-    }, (error) => {
-        console.error("Firebase subscription error:", error);
-        callback(null);
-    });
+                    if (error) {
+                        console.error("Error fetching initial game state:", error);
+                        callback(null);
+                    } else if (data) {
+                        callback(data.game_state as GameState | null);
+                    }
+                };
+                fetchInitialState();
+            } else if (err) {
+                console.error(`Failed to subscribe to game ${gameId}:`, err);
+                callback(null);
+            }
+        });
 
     return () => {
-        off(gameRef, 'value', unsubscribe);
+        supabase.removeChannel(channel);
     };
 }
 
 export async function dispatchAction(gameId: string, action: GameAction): Promise<void> {
-    const response = await fetch('/api/dispatchAction', {
+    const response = await fetch('/.netlify/functions/dispatchAction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gameId, action })

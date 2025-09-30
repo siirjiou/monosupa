@@ -1,5 +1,5 @@
 import React from 'react';
-import { Player, Property, Space } from '../types';
+import { Player, Property, Space } from '../types.ts';
 
 interface PlayerInfoProps {
   player: Player;
