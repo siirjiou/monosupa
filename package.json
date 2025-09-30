@@ -1,0 +1,24 @@
+{
+  "name": "ai-monopoly:-dynamic-deal",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react-dom": "^19.1.1",
+    "@google/genai": "^1.20.0",
+    "react": "^19.1.1",
+    "@supabase/supabase-js": "^2.44.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "netlify-cli": "^17.33.3",
+    "@types/aws-lambda": "^8.10.142"
+  }
+}
