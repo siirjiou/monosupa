@@ -1,5 +1,5 @@
 import React from 'react';
-import { Space, Property, SpaceType, Player } from '@/types';
+import { Space, Property, SpaceType, Player } from '@/types.ts';
 
 interface PlayerTokenProps {
     player: Player;
@@ -121,7 +121,7 @@ export const GameBoard: React.FC<{ board: (Space | Property)[]; players: Player[
                     {board.map(space => <SpaceComponent key={space.id} space={space} players={players} />)}
                     <div className="col-start-2 col-span-9 row-start-2 row-span-9 bg-[#2D3748] flex justify-center items-center border border-black/50">
                         <h1 className="text-5xl md:text-6xl font-display font-extrabold text-[#E53E3E] tracking-wider -rotate-45 border-4 border-[#E53E3E] p-4 shadow-lg bg-gray-800">
-                           SIIRJIOU'S MONOPOLY
+                           MONOPOLY
                         </h1>
                     </div>
                 </div>
