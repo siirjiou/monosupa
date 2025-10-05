@@ -30,10 +30,10 @@ const PlayerToken: React.FC<PlayerTokenProps> = ({ player, index, playersOnSpace
 };
 
 const getRotationClass = (index: number): string => {
-  if (index > 0 && index < 10) return 'rotate-180';
-  if (index > 10 && index < 20) return 'rotate-90';
+  if (index > 0 && index < 10) return 'rotate-0';
+  if (index > 10 && index < 20) return 'rotate-0';
   if (index > 20 && index < 30) return '-rotate-0';
-  if (index > 30 && index < 40) return '-rotate-90';
+  if (index > 30 && index < 40) return '-rotate-0';
   return '';
 };
 

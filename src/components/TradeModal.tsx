@@ -1,86 +1,125 @@
-import React, { useState } from 'react';
-import { Player, Property, Space, TradeOffer } from '@/types.ts';
+import React, { useMemo } from 'react';
+import { Player, Property, Space } from '@/types.ts';
+import { PropertyCard } from '@/components/PropertyCard.tsx';
 
 interface TradeModalProps {
-    currentPlayer: Player;
-    targetPlayer: Player;
-    board: (Space | Property)[];
-    isCounterOffer: boolean;
-    onClose: () => void;
-    onPropose: (tradeDetails: TradeOffer) => void;
+  currentPlayer: Player;
+  targetPlayer: Player;
+  board: (Space | Property)[];
+  isCounterOffer?: boolean;
+  onClose: () => void;
+  onPropose: (tradeDetails: {
+    fromPlayerId: number;
+    toPlayerId: number;
+    offer: { money: number; properties: number[] };
+    request: { money: number; properties: number[] };
+  }) => void;
+  /** optional countdown shown when composing a counter */
+  secondsLeft?: number;
 }
 
-const PropertySelectItem: React.FC<{ property: Property; onSelect: () => void; isSelected: boolean }> = ({ property, onSelect, isSelected }) => (
-    <div onClick={onSelect} className={`p-2 rounded border-2 cursor-pointer ${isSelected ? 'border-blue-500 bg-blue-100' : 'border-gray-300'}`}>
-        <div className="flex items-center space-x-2">
-            <div className={`w-3 h-6 rounded ${property.color}`}></div>
-            <span className="font-semibold">{property.name}</span>
+export const TradeModal: React.FC<TradeModalProps> = ({
+  currentPlayer,
+  targetPlayer,
+  board,
+  isCounterOffer = false,
+  onClose,
+  onPropose,
+  secondsLeft
+}) => {
+  const currentProps = useMemo(
+    () => currentPlayer.properties.map(id => board[id]).filter(Boolean) as Property[],
+    [currentPlayer, board]
+  );
+  const targetProps = useMemo(
+    () => targetPlayer.properties.map(id => board[id]).filter(Boolean) as Property[],
+    [targetPlayer, board]
+  );
+
+  const [offerMoney, setOfferMoney] = React.useState(0);
+  const [requestMoney, setRequestMoney] = React.useState(0);
+  const [offerProps, setOfferProps] = React.useState<number[]>([]);
+  const [requestProps, setRequestProps] = React.useState<number[]>([]);
+
+  const toggleOfferProp = (id: number) =>
+    setOfferProps(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  const toggleRequestProp = (id: number) =>
+    setRequestProps(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+
+  const submit = () => {
+    onPropose({
+      fromPlayerId: currentPlayer.id,
+      toPlayerId: targetPlayer.id,
+      offer: { money: Math.max(0, Math.floor(offerMoney)), properties: offerProps },
+      request: { money: Math.max(0, Math.floor(requestMoney)), properties: requestProps }
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-bold">
+          {isCounterOffer ? 'Counter Offer' : 'Propose Trade'} to {targetPlayer.name}
+        </h3>
+        {typeof secondsLeft === 'number' && (
+          <div className="text-sm text-gray-600">Time left: <span className="font-semibold">{secondsLeft}s</span></div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* You Give */}
+        <div className="border rounded p-2">
+          <h4 className="font-semibold mb-2">You Give</h4>
+          <label className="block text-sm mb-2">
+            Cash:
+            <input
+              type="number"
+              min={0}
+              value={offerMoney}
+              onChange={e => setOfferMoney(parseInt(e.target.value || '0', 10))}
+              className="ml-2 p-1 border rounded w-28"
+            />
+          </label>
+          <div className="space-y-1 max-h-40 overflow-y-auto">
+            {currentProps.map(p => (
+              <label key={p.id} className="flex items-center space-x-2">
+                <input type="checkbox" checked={offerProps.includes(p.id)} onChange={() => toggleOfferProp(p.id)} />
+                <PropertyCard property={p} compact />
+              </label>
+            ))}
+          </div>
         </div>
+
+        {/* You Get */}
+        <div className="border rounded p-2">
+          <h4 className="font-semibold mb-2">You Get</h4>
+          <label className="block text-sm mb-2">
+            Cash:
+            <input
+              type="number"
+              min={0}
+              value={requestMoney}
+              onChange={e => setRequestMoney(parseInt(e.target.value || '0', 10))}
+              className="ml-2 p-1 border rounded w-28"
+            />
+          </label>
+          <div className="space-y-1 max-h-40 overflow-y-auto">
+            {targetProps.map(p => (
+              <label key={p.id} className="flex items-center space-x-2">
+                <input type="checkbox" checked={requestProps.includes(p.id)} onChange={() => toggleRequestProp(p.id)} />
+                <PropertyCard property={p} compact />
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end space-x-2">
+        <button onClick={onClose} className="px-4 py-2 rounded bg-gray-300">Cancel</button>
+        <button onClick={submit} className="px-4 py-2 rounded bg-blue-600 text-white font-bold">Send</button>
+      </div>
     </div>
-);
+  );
+};
 
-
-export const TradeModal: React.FC<TradeModalProps> = ({ currentPlayer, targetPlayer, board, isCounterOffer, onClose, onPropose }) => {
-    const [offer, setOffer] = useState<{ money: number, properties: number[] }>({ money: 0, properties: [] });
-    const [request, setRequest] = useState<{ money: number, properties: number[] }>({ money: 0, properties: [] });
-
-    const currentPlayerProps = currentPlayer.properties.map(id => board.find(s => s.id === id) as Property).filter(p => p && !p.mortgaged);
-    const targetPlayerProps = targetPlayer.properties.map(id => board.find(s => s.id === id) as Property).filter(p => p && !p.mortgaged);
-
-
-    const handleSelectOfferProperty = (propId: number) => {
-        setOffer(prev => ({ ...prev, properties: prev.properties.includes(propId) ? prev.properties.filter(id => id !== propId) : [...prev.properties, propId] }));
-    };
-
-    const handleSelectRequestProperty = (propId: number) => {
-        setRequest(prev => ({ ...prev, properties: prev.properties.includes(propId) ? prev.properties.filter(id => id !== propId) : [...prev.properties, propId] }));
-    };
-    
-    const handleProposeTrade = () => {
-        onPropose({
-            fromPlayerId: currentPlayer.id,
-            toPlayerId: targetPlayer.id,
-            offer,
-            request
-        });
-    }
-
-    return (
-        <div className="p-2">
-            <div className="grid grid-cols-2 gap-4">
-                {/* Current Player's Offer */}
-                <div className="border p-3 rounded-lg">
-                    <h4 className="font-bold text-lg text-center mb-2">{currentPlayer.name} Offers</h4>
-                    <label className="block mb-2">
-                        Money:
-                        <input type="number" value={offer.money} onChange={e => setOffer(p => ({...p, money: Math.min(currentPlayer.money, parseInt(e.target.value) || 0)}))} 
-                        className="w-full p-1 border rounded" max={currentPlayer.money} min="0" />
-                    </label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {currentPlayerProps.length > 0 ? currentPlayerProps.map(p => <PropertySelectItem key={p.id} property={p} onSelect={() => handleSelectOfferProperty(p.id)} isSelected={offer.properties.includes(p.id)} />) : <p className="text-xs text-gray-400 italic">No properties to trade.</p>}
-                    </div>
-                </div>
-
-                {/* Target Player's Offer (Request) */}
-                 <div className="border p-3 rounded-lg">
-                    <h4 className="font-bold text-lg text-center mb-2">{targetPlayer.name} Offers</h4>
-                    <label className="block mb-2">
-                        Money:
-                        <input type="number" value={request.money} onChange={e => setRequest(p => ({...p, money: Math.min(targetPlayer.money, parseInt(e.target.value) || 0)}))} 
-                        className="w-full p-1 border rounded" max={targetPlayer.money} min="0" />
-                    </label>
-                     <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {targetPlayerProps.length > 0 ? targetPlayerProps.map(p => <PropertySelectItem key={p.id} property={p} onSelect={() => handleSelectRequestProperty(p.id)} isSelected={request.properties.includes(p.id)} />) : <p className="text-xs text-gray-400 italic">No properties to trade.</p>}
-                    </div>
-                </div>
-            </div>
-
-            <div className="mt-6 flex justify-end space-x-3">
-                <button onClick={onClose} className="bg-gray-400 text-white px-4 py-2 rounded-lg">Cancel</button>
-                <button onClick={handleProposeTrade} className="bg-green-600 text-white px-4 py-2 rounded-lg">
-                    {isCounterOffer ? 'Counter Offer' : 'Propose Trade'}
-                </button>
-            </div>
-        </div>
-    )
-}
+export default TradeModal;
