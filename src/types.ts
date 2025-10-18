@@ -68,6 +68,17 @@ export type PendingAction =
  | { type: PendingActionType.AWAIT_DEBT_RESOLUTION, playerId: number, amountOwed: number, owedToPlayerId: number | 'bank' };
 
 
+export type GameMode = 'classic' | 'quick';
+
+export type TimerType = 'PURCHASE' | 'TRADE_RESPONSE' | 'JAIL_DECISION';
+
+export interface GameTimer {
+  type: TimerType;
+  playerId: number;
+  expiresAt: number;
+  duration: number;
+}
+
 export interface GameState {
   id: string;
   hostId: number;
@@ -80,6 +91,9 @@ export interface GameState {
   doublesCount: number;
   hasRolled: boolean;
   pendingAction: PendingAction | null;
+  gameMode: GameMode;
+  timer: GameTimer | null;
+  turnTimerExpiresAt: number | null;
 }
 
 export interface TradeOffer {
@@ -106,6 +120,7 @@ export enum CardAction {
   MOVE_TO = 'MOVE_TO',
   MOVE_BY = 'MOVE_BY',
   GO_TO_JAIL = 'GO_TO_JAIL',
+  // FIX: Corrected typo in enum member from GET_OUT_OF_JAIl_FREE to GET_OUT_OF_JAIL_FREE.
   GET_OUT_OF_JAIL_FREE = 'GET_OUT_OF_JAIL_FREE',
   PAY_FOR_BUILDINGS = 'PAY_FOR_BUILDINGS',
   RECEIVE_FROM_PLAYERS = 'RECEIVE_FROM_PLAYERS',
@@ -122,7 +137,19 @@ export interface CardEffect {
     }
 }
 
-export type GameAction = { playerId: number } & (
+// types.ts
+export interface ChatMessage {
+  id: string | number;      // depends on your table PK type
+  game_id: string;
+  player_id: number;
+  player_name: string;
+  message: string;
+  created_at: string;       // ISO timestamp
+}
+
+
+// FIX: Extracted the action payload into its own type to resolve issues with `Omit<GameAction, 'playerId'>` in App.tsx.
+export type GameActionPayload = 
   | { type: 'START_GAME' }
   | { type: 'ROLL_DICE' }
   | { type: 'BUY_PROPERTY' }
@@ -140,4 +167,7 @@ export type GameAction = { playerId: number } & (
   | { type: 'ATTEMPT_JAIL_ROLL' }
   | { type: 'RESOLVE_DEBT' }
   | { type: 'DECLARE_BANKRUPTCY' }
-);
+  | { type: 'LEAVE_GAME' }
+  | { type: 'TIMER_EXPIRED' };
+
+export type GameAction = GameActionPayload & { playerId: number };

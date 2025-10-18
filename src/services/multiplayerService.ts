@@ -1,12 +1,12 @@
-import { GameState, GameAction } from '@/types';
-import { supabase } from '@/supabaseClient';
+import { GameState, GameAction, GameMode } from '../types.ts';
+import { supabase } from '../supabaseClient.ts';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-export async function createGame(hostName: string): Promise<{ gameId: string, playerId: number }> {
+export async function createGame(hostName: string, gameMode: GameMode): Promise<{ gameId: string, playerId: number }> {
     const response = await fetch('/.netlify/functions/createGame', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: hostName })
+        body: JSON.stringify({ name: hostName, gameMode })
     });
     if (!response.ok) {
         const error = await response.json();
@@ -29,8 +29,7 @@ export async function joinGame(gameId: string, playerName: string): Promise<{ ga
 }
 
 export function subscribeToGame(gameId: string, callback: (gameState: GameState | null) => void): () => void {
-    // Each subscription gets its own channel, making it self-contained and robust.
-    const channel = supabase
+    const channel: RealtimeChannel = supabase
         .channel(`game-${gameId}`)
         .on(
             'postgres_changes',
@@ -70,7 +69,6 @@ export function subscribeToGame(gameId: string, callback: (gameState: GameState 
             }
         });
 
-    // The returned cleanup function unsubscribes from this specific channel.
     return () => {
         supabase.removeChannel(channel);
     };

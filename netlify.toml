@@ -1,0 +1,10 @@
+[dev]
+command = "npm run dev"   # start Vite
+targetPort = 5173         # Vite default
+port = 8888               # Netlify proxy
+publish = "dist"          # build output (used by netlify preview/build)
+autoLaunch = true
+
+[build]
+command = "npm run build"
+publish = "dist"

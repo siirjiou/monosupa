@@ -2,6 +2,10 @@ import { GameState, GamePhase, Player, Property, Space, SpaceType, PendingAction
 import { GO_SALARY, JAIL_POSITION } from './constants';
 import { generateCardEvent } from './geminiService';
 
+const TURN_DURATION = 60000;
+const PURCHASE_DURATION = 15000;
+const TRADE_RESPONSE_DURATION = 30000;
+const JAIL_DECISION_DURATION = 60000;
 
 // --- Helper Functions ---
 function log(state: GameState, message: string): GameState {
@@ -68,6 +72,8 @@ function endTurn(state: GameState, forceEndTurn = false): GameState {
     if (!forceEndTurn && newState.dice[0] === newState.dice[1] && !endingPlayer.isJailed && newState.doublesCount < 3) {
         newState = log(newState, `${endingPlayer.name} rolled doubles and gets another turn!`);
         newState.hasRolled = false;
+        newState.turnTimerExpiresAt = Date.now() + TURN_DURATION;
+        newState.timer = null;
         return newState;
     }
     
@@ -85,11 +91,19 @@ function endTurn(state: GameState, forceEndTurn = false): GameState {
     newState.currentPlayerIndex = nextPlayerIndex;
     newState.hasRolled = false;
     newState.doublesCount = 0;
+    newState.turnTimerExpiresAt = Date.now() + TURN_DURATION;
+    newState.timer = null;
     
     if (nextPlayer.isJailed) {
         newState.pendingAction = {
             type: PendingActionType.AWAIT_JAIL_DECISION,
             playerId: nextPlayer.id,
+        };
+        newState.timer = {
+            type: 'JAIL_DECISION',
+            playerId: nextPlayer.id,
+            expiresAt: Date.now() + JAIL_DECISION_DURATION,
+            duration: JAIL_DECISION_DURATION / 1000
         };
         newState = log(newState, `${nextPlayer.name} is in jail and must decide what to do.`);
     }
@@ -143,6 +157,7 @@ async function handleSpaceLanding(state: GameState, playerId: number, space: Spa
             if (prop.ownerId === undefined) {
                  if(player.money >= prop.price) {
                     newState.pendingAction = { type: PendingActionType.AWAIT_PURCHASE, playerId: player.id, propertyId: prop.id };
+                    newState.timer = { type: 'PURCHASE', playerId: player.id, expiresAt: Date.now() + PURCHASE_DURATION, duration: PURCHASE_DURATION / 1000 };
                  } else {
                      newState = log(newState, `${player.name} cannot afford to buy ${prop.name}.`);
                      newState = endTurn(newState, options?.forceEndTurn);
@@ -222,6 +237,7 @@ async function applyCardEffect(state: GameState, playerId: number, card: CardEff
             newState = updatePlayer(newState, player);
             newState = endTurn(newState, true);
             break;
+        // FIX: Update enum member to match corrected typo in types.ts.
         case CardAction.GET_OUT_OF_JAIL_FREE:
             player.getOutOfJailFreeCards += 1;
             newState = updatePlayer(newState, player);
@@ -284,8 +300,44 @@ export async function processAction(state: GameState, action: GameAction): Promi
         case 'START_GAME':
             if (action.playerId !== state.hostId) throw new Error("Only the host can start the game.");
             if (state.players.length < 2) throw new Error("Need at least 2 players to start.");
+            
+            if (nextState.gameMode === 'quick') {
+                nextState = log(nextState, "Quick Game Start: Distributing random properties!");
+                const ownablePropertyIds = nextState.board
+                    .map((s, i) => i)
+                    .filter(i => 'price' in nextState.board[i]);
+
+                for (let i = ownablePropertyIds.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [ownablePropertyIds[i], ownablePropertyIds[j]] = [ownablePropertyIds[j], ownablePropertyIds[i]];
+                }
+                
+                let propertyCursor = 0;
+                const updatedPlayers = [...nextState.players];
+
+                for (let i = 0; i < updatedPlayers.length; i++) {
+                    const player = { ...updatedPlayers[i] };
+                    for (let j = 0; j < 3; j++) {
+                        if (propertyCursor < ownablePropertyIds.length) {
+                            const propId = ownablePropertyIds[propertyCursor];
+                            const prop = nextState.board[propId] as Property;
+                            
+                            if (prop.ownerId === undefined) {
+                                prop.ownerId = player.id;
+                                player.properties.push(prop.id);
+                                nextState = log(nextState, `${player.name} received ${prop.name}.`);
+                            }
+                            propertyCursor++;
+                        }
+                    }
+                    updatedPlayers[i] = player;
+                }
+                nextState.players = updatedPlayers;
+            }
+
             nextState.phase = GamePhase.PLAYER_TURN;
             nextState = log(nextState, `Game started! It's ${nextState.players[0].name}'s turn.`);
+            nextState.turnTimerExpiresAt = Date.now() + TURN_DURATION;
             break;
         case 'ROLL_DICE': {
             if (state.hasRolled) throw new Error("You have already rolled.");
@@ -324,6 +376,7 @@ export async function processAction(state: GameState, action: GameAction): Promi
 
             nextState = log(nextState, `${player.name} bought ${prop.name}.`);
             nextState.pendingAction = null;
+            nextState.timer = null;
             nextState = endTurn(nextState);
             break;
         }
@@ -333,6 +386,7 @@ export async function processAction(state: GameState, action: GameAction): Promi
              const playerName = getPlayer(state, action.playerId)?.name || 'A player'
              nextState = log(nextState, `${playerName} declined to buy ${propName}.`);
              nextState.pendingAction = null;
+             nextState.timer = null;
              nextState = endTurn(nextState);
             break;
         }
@@ -363,6 +417,12 @@ export async function processAction(state: GameState, action: GameAction): Promi
                 type: PendingActionType.AWAIT_TRADE_RESPONSE,
                 playerId: action.tradeOffer.toPlayerId,
                 tradeOffer: action.tradeOffer
+            };
+            nextState.timer = {
+                type: 'TRADE_RESPONSE',
+                playerId: action.tradeOffer.toPlayerId,
+                expiresAt: Date.now() + TRADE_RESPONSE_DURATION,
+                duration: TRADE_RESPONSE_DURATION / 1000,
             };
             const toPlayer = getPlayer(state, action.tradeOffer.toPlayerId)!;
             nextState = log(nextState, `${proposer.name} proposed a trade to ${toPlayer.name}.`);
@@ -399,6 +459,7 @@ export async function processAction(state: GameState, action: GameAction): Promi
                 nextState = log(nextState, `${toPlayer.name} declined the trade from ${fromPlayer.name}.`);
             }
             nextState.pendingAction = null;
+            nextState.timer = null;
             break;
         }
          case 'MORTGAGE_PROPERTY': {
@@ -461,80 +522,60 @@ export async function processAction(state: GameState, action: GameAction): Promi
              nextState = log(nextState, `${player.name} sold ${buildingType} on ${prop.name} for $${salePrice}.`);
              break;
          }
-         case 'PAY_JAIL_FINE': {
-            if (!state.pendingAction || state.pendingAction.type !== PendingActionType.AWAIT_JAIL_DECISION) throw new Error("Not in jail.");
-            let player = getPlayer(state, action.playerId)!;
-            if (player.money < 50) throw new Error("Not enough money to pay the fine.");
-
-            nextState = adjustPlayerMoney(nextState, player.id, -50);
-            nextState = log(nextState, `${player.name} paid $50 to get out of jail.`);
-            
-            player = getPlayer(nextState, action.playerId)!;
-            player.isJailed = false;
-            player.jailTurns = 0;
-            nextState = updatePlayer(nextState, player);
-            nextState.pendingAction = null;
-            nextState = log(nextState, `${player.name} is now out of jail. Roll the dice to continue your turn.`);
-            break;
-         }
-         case 'USE_JAIL_CARD': {
-            if (!state.pendingAction || state.pendingAction.type !== PendingActionType.AWAIT_JAIL_DECISION) throw new Error("Not in jail.");
-            let player = getPlayer(state, action.playerId)!;
-            if(player.getOutOfJailFreeCards <= 0) throw new Error("No 'Get Out of Jail Free' cards to use.");
-
-            player.getOutOfJailFreeCards--;
-            player.isJailed = false;
-            player.jailTurns = 0;
-            nextState = updatePlayer(nextState, player);
-            nextState.pendingAction = null;
-            nextState = log(nextState, `${player.name} used a 'Get Out of Jail Free' card and can now roll the dice.`);
-            break;
-         }
+         case 'PAY_JAIL_FINE':
+         case 'USE_JAIL_CARD':
          case 'ATTEMPT_JAIL_ROLL': {
             if (!state.pendingAction || state.pendingAction.type !== PendingActionType.AWAIT_JAIL_DECISION) throw new Error("Not in jail.");
             let player = getPlayer(state, action.playerId)!;
-            const die1 = Math.floor(Math.random() * 6) + 1;
-            const die2 = Math.floor(Math.random() * 6) + 1;
-            nextState = log(nextState, `${player.name} attempts to roll doubles... and gets a ${die1} and a ${die2}.`);
-            nextState.dice = [die1, die2];
+            nextState.pendingAction = null; // Clear action first
+            nextState.timer = null;
 
-            if (die1 === die2) {
-                nextState = log(nextState, `Success! ${player.name} is out of jail.`);
+            if (action.type === 'PAY_JAIL_FINE') {
+                if (player.money < 50) throw new Error("Not enough money to pay the fine.");
+                nextState = adjustPlayerMoney(nextState, player.id, -50);
+                player = getPlayer(nextState, action.playerId)!;
                 player.isJailed = false;
                 player.jailTurns = 0;
                 nextState = updatePlayer(nextState, player);
-                nextState.pendingAction = null;
-                nextState.hasRolled = true;
-                nextState = await movePlayer(nextState, player.id, die1 + die2, { forceEndTurn: true });
-            } else {
-                player.jailTurns++;
+                nextState = log(nextState, `${player.name} paid $50 to get out of jail. Roll to continue.`);
+            } else if (action.type === 'USE_JAIL_CARD') {
+                if(player.getOutOfJailFreeCards <= 0) throw new Error("No 'Get Out of Jail Free' cards.");
+                player.getOutOfJailFreeCards--;
+                player.isJailed = false;
+                player.jailTurns = 0;
                 nextState = updatePlayer(nextState, player);
-                nextState.pendingAction = null;
-
-                if (player.jailTurns >= 3) {
-                    nextState = log(nextState, `Third attempt failed. ${player.name} must pay the $50 fine.`);
-                    nextState = await handlePayment(nextState, player.id, 'bank', 50, `${player.name} pays the $50 jail fine.`);
-                    
-                    // If payment is pending, we keep them in jail until it's resolved.
-                    if (!nextState.pendingAction) {
-                        const paidPlayer = getPlayer(nextState, player.id)!;
-                        paidPlayer.isJailed = false;
-                        paidPlayer.jailTurns = 0;
-                        nextState = updatePlayer(nextState, paidPlayer);
-                        // Player is out but turn ends
-                        nextState = endTurn(nextState, true);
-                    } else {
-                        // The debt is pending, so they stay in jail until resolved.
-                        // On next turn, they'll be prompted to pay again.
-                        nextState = endTurn(nextState, true);
-                    }
+                nextState = log(nextState, `${player.name} used a card and can now roll the dice.`);
+            } else { // ATTEMPT_JAIL_ROLL
+                const die1 = Math.floor(Math.random() * 6) + 1;
+                const die2 = Math.floor(Math.random() * 6) + 1;
+                nextState = log(nextState, `${player.name} rolls for doubles... a ${die1} and a ${die2}.`);
+                nextState.dice = [die1, die2];
+                if (die1 === die2) {
+                    nextState = log(nextState, `Success! ${player.name} is out of jail.`);
+                    player.isJailed = false;
+                    player.jailTurns = 0;
+                    nextState = updatePlayer(nextState, player);
+                    nextState.hasRolled = true; // The roll attempt counts as the roll for the turn
+                    nextState = await movePlayer(nextState, player.id, die1 + die2, { forceEndTurn: true });
                 } else {
-                    nextState = log(nextState, `Failed to roll doubles. ${player.name} remains in jail.`);
+                    player.jailTurns++;
+                    nextState = updatePlayer(nextState, player);
+                    if (player.jailTurns >= 3) {
+                        nextState = log(nextState, `Third attempt failed. ${player.name} must pay $50.`);
+                        nextState = await handlePayment(nextState, player.id, 'bank', 50, `${player.name} pays jail fine.`);
+                        if (!nextState.pendingAction) {
+                            const paidPlayer = getPlayer(nextState, player.id)!;
+                            paidPlayer.isJailed = false; paidPlayer.jailTurns = 0;
+                            nextState = updatePlayer(nextState, paidPlayer);
+                        }
+                    } else {
+                         nextState = log(nextState, `Failed. ${player.name} remains in jail.`);
+                    }
                     nextState = endTurn(nextState, true);
                 }
             }
             break;
-         }
+        }
          case 'RESOLVE_DEBT': {
             if (!state.pendingAction || state.pendingAction.type !== PendingActionType.AWAIT_DEBT_RESOLUTION) throw new Error("Not resolving a debt.");
             const { amountOwed, owedToPlayerId } = state.pendingAction;
@@ -548,7 +589,6 @@ export async function processAction(state: GameState, action: GameAction): Promi
             nextState.pendingAction = null;
             nextState = log(nextState, `${player.name} has paid their debt of $${amountOwed}.`);
             
-            // If the debt was from being in jail too long, free them.
             const freedPlayer = getPlayer(nextState, player.id)!;
             if (freedPlayer.isJailed && freedPlayer.jailTurns >= 3) {
                  freedPlayer.isJailed = false;
@@ -598,6 +638,79 @@ export async function processAction(state: GameState, action: GameAction): Promi
             }
             break;
          }
+         case 'LEAVE_GAME': {
+            const leavingPlayer = getPlayer(state, action.playerId)!;
+            nextState = log(nextState, `${leavingPlayer.name} has left the game. Their properties are now available.`);
+
+            leavingPlayer.properties.forEach(propId => {
+                const prop = nextState.board[propId] as Property;
+                prop.ownerId = undefined; prop.mortgaged = false; prop.houses = 0;
+            });
+            
+            const updatedLeavingPlayer = {...leavingPlayer, money: 0, isBankrupt: true, properties: []};
+            nextState = updatePlayer(nextState, updatedLeavingPlayer);
+            const wasCurrentTurn = state.players[state.currentPlayerIndex].id === leavingPlayer.id;
+
+            const nonBankruptPlayers = nextState.players.filter(p => !p.isBankrupt);
+            if (nonBankruptPlayers.length <= 1) {
+                nextState.phase = GamePhase.GAME_OVER;
+                nextState.timer = null;
+                nextState.turnTimerExpiresAt = null;
+                nextState = log(nextState, `Game over! ${nonBankruptPlayers[0]?.name || 'The last player'} wins!`);
+            } else if (wasCurrentTurn) {
+                nextState = endTurn(nextState, true);
+            }
+            break;
+         }
+         case 'TIMER_EXPIRED': {
+            const now = Date.now();
+            // Priority 1: Action-specific timer
+            if (nextState.timer && now >= nextState.timer.expiresAt) {
+                const { type, playerId } = nextState.timer;
+                const player = getPlayer(nextState, playerId)!;
+
+                nextState.timer = null;
+                const pendingAction = nextState.pendingAction;
+                nextState.pendingAction = null;
+
+                switch(type) {
+                    case 'PURCHASE':
+                        if (pendingAction?.type === PendingActionType.AWAIT_PURCHASE) {
+                            nextState = log(nextState, `Time ran out! ${player.name} auto-declined to buy ${nextState.board[pendingAction.propertyId].name}.`);
+                            nextState = endTurn(nextState);
+                        }
+                        break;
+                    case 'TRADE_RESPONSE':
+                        if (pendingAction?.type === PendingActionType.AWAIT_TRADE_RESPONSE) {
+                            const fromPlayer = getPlayer(nextState, pendingAction.tradeOffer.fromPlayerId)!;
+                            nextState = log(nextState, `Time ran out! ${player.name} auto-declined the trade from ${fromPlayer.name}.`);
+                        }
+                        break;
+                    case 'JAIL_DECISION':
+                        if (pendingAction?.type === PendingActionType.AWAIT_JAIL_DECISION) {
+                            nextState = log(nextState, `Time ran out! ${player.name} will pay the fine.`);
+                            if (player.money >= 50) {
+                                nextState = adjustPlayerMoney(nextState, player.id, -50);
+                                const freedPlayer = getPlayer(nextState, player.id)!;
+                                freedPlayer.isJailed = false; freedPlayer.jailTurns = 0;
+                                nextState = updatePlayer(nextState, freedPlayer);
+                                nextState = log(nextState, `${freedPlayer.name} is out of jail and can roll.`);
+                            } else {
+                                nextState = log(nextState, `${player.name} cannot afford the fine and remains in jail.`);
+                                nextState = endTurn(nextState, true);
+                            }
+                        }
+                        break;
+                }
+            }
+            // Priority 2: Main turn timer
+            else if (nextState.turnTimerExpiresAt && now >= nextState.turnTimerExpiresAt && !nextState.hasRolled) {
+                const player = nextState.players[nextState.currentPlayerIndex];
+                nextState = log(nextState, `Time is up! Skipping ${player.name}'s turn.`);
+                nextState = endTurn(nextState, true); // Force end turn
+            }
+            break;
+        }
     }
     return nextState;
 }

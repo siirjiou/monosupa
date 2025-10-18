@@ -18,9 +18,9 @@ export const handler: Handler = async (event) => {
     }
 
     try {
-        const { name } = JSON.parse(event.body || '{}');
-        if (!name) {
-            return { statusCode: 400, body: JSON.stringify({ message: 'Player name is required.' }) };
+        const { name, gameMode } = JSON.parse(event.body || '{}');
+        if (!name || !gameMode) {
+            return { statusCode: 400, body: JSON.stringify({ message: 'Player name and game mode are required.' }) };
         }
 
         const gameId = generateGameId();
@@ -54,6 +54,9 @@ export const handler: Handler = async (event) => {
             doublesCount: 0,
             hasRolled: false,
             pendingAction: null,
+            gameMode: gameMode,
+            timer: null,
+            turnTimerExpiresAt: null,
         };
 
         const { error } = await supabase

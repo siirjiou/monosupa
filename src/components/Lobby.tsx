@@ -1,11 +1,15 @@
 import React from 'react';
-import { GameState, Player } from '@/types.ts';
+import { GameState, Player, ChatMessage } from '../types.ts';
+import { ChatBox } from './ChatBox.tsx';
 
 interface LobbyProps {
     gameState: GameState;
     localPlayerId: number;
+    localPlayer: Player | null;
     onStartGame: () => void;
     onLeave: () => void;
+    chatMessages: ChatMessage[];
+    onSendMessage: (message: string) => void;
 }
 
 const PlayerLobbyCard: React.FC<{ player: Player, isHost: boolean }> = ({ player, isHost }) => (
@@ -20,7 +24,7 @@ const PlayerLobbyCard: React.FC<{ player: Player, isHost: boolean }> = ({ player
     </div>
 );
 
-export const Lobby: React.FC<LobbyProps> = ({ gameState, localPlayerId, onStartGame, onLeave }) => {
+export const Lobby: React.FC<LobbyProps> = ({ gameState, localPlayerId, localPlayer, onStartGame, onLeave, chatMessages, onSendMessage }) => {
     const isHost = gameState.hostId === localPlayerId;
     const canStart = gameState.players.length >= 2;
 
@@ -70,6 +74,10 @@ export const Lobby: React.FC<LobbyProps> = ({ gameState, localPlayerId, onStartG
                         </button>
                     )}
                 </div>
+            </div>
+
+            <div className="w-full max-w-2xl bg-white p-4 mt-4 rounded-xl shadow-2xl">
+                <ChatBox messages={chatMessages} onSendMessage={onSendMessage} localPlayer={localPlayer} />
             </div>
         </div>
     );

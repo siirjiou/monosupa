@@ -1,12 +1,12 @@
-import { GameState, GameAction } from '@/types.ts';
+import { GameState, GameAction, GameMode, ChatMessage } from '@/types.ts';
 import { supabase } from '@/supabaseClient.ts';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-export async function createGame(hostName: string): Promise<{ gameId: string, playerId: number }> {
+export async function createGame(hostName: string, gameMode: GameMode): Promise<{ gameId: string, playerId: number }> {
     const response = await fetch('/.netlify/functions/createGame', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: hostName })
+        body: JSON.stringify({ name: hostName, gameMode })
     });
     if (!response.ok) {
         const error = await response.json();
@@ -84,5 +84,73 @@ export async function dispatchAction(gameId: string, action: GameAction): Promis
     if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Failed to perform action');
+    }
+}
+
+export async function sendChatMessage(gameId: string, playerId: number, playerName: string, message: string): Promise<void> {
+    const response = await fetch('/.netlify/functions/sendChatMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId, playerId, playerName, message })
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to send message');
+    }
+}
+
+export function subscribeToChat(gameId: string, callback: (messages: ChatMessage[]) => void): () => void {
+     const channel: RealtimeChannel = supabase
+        .channel(`chat-${gameId}`)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'chat_messages',
+                filter: `game_id=eq.${gameId}`,
+            },
+            () => {
+                // When a new message arrives, refetch all messages to stay in sync
+                 const fetchMessages = async () => {
+                    const { data, error } = await supabase
+                        .from('chat_messages')
+                        .select('*')
+                        .eq('game_id', gameId)
+                        .order('created_at', { ascending: true });
+                    
+                    if (error) {
+                        console.error("Error fetching chat messages:", error);
+                    } else {
+                        callback(data as ChatMessage[]);
+                    }
+                };
+                fetchMessages();
+            }
+        )
+        .subscribe((status, err) => {
+             if (status === 'SUBSCRIBED') {
+                console.log(`Subscribed to chat for game ${gameId}`);
+                 const fetchInitialMessages = async () => {
+                    const { data, error } = await supabase
+                        .from('chat_messages')
+                        .select('*')
+                        .eq('game_id', gameId)
+                        .order('created_at', { ascending: true });
+
+                    if (error) {
+                        console.error("Error fetching initial chat messages:", error);
+                    } else {
+                        callback(data as ChatMessage[]);
+                    }
+                };
+                fetchInitialMessages();
+            } else if (err) {
+                 console.error(`Failed to subscribe to chat for game ${gameId}:`, err);
+            }
+        });
+
+    return () => {
+        supabase.removeChannel(channel);
     }
 }
