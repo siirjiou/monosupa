@@ -634,7 +634,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-800 flex flex-col justify-center items-center p-4">
         <div className="text-center bg-white p-10 rounded-xl shadow-2xl">
-          <h1 className="text-6xl font-display font-extrabold text-red-600 mb-2">Gemini Monopoly</h1>
+          <h1 className="text-6xl font-display font-extrabold text-red-600 mb-2">Monopoly</h1>
           <p className="text-xl text-gray-600 mb-8">Online Multiplayer</p>
           <SetupScreen onHost={handleHostGame} onJoin={handleJoinGame} />
         </div>
@@ -743,7 +743,7 @@ const App: React.FC = () => {
               disabled={!isMyTurn || gameState.hasRolled || isProcessing || !!gameState.pendingAction}
               className="w-full bg-red-600 text-white font-bold py-3 rounded-lg shadow-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              {isProcessing ? 'Processing...' : 'Roll Dice'}
+              {isProcessing ? 'Processing...' : 'Get 2 Numbers'}
             </button>
             {isMyTurn && gameState.hasRolled && (
                  <button 
